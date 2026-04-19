@@ -36,11 +36,10 @@ One runtime address
 |---|---|
 | `contracts/evm/` | Canonical Solidity contracts, Hardhat config, EVM tests, EVM deploy scripts |
 | `contracts/pvm/` | Mirrored Solidity sources compiled for PolkaVM / pallet-revive with `resolc` |
+| `docs/` | Architecture and technical documentation for the Smart Runtime model |
 | `web/` | Runtime manager UI for browsing pallets and performing deploy/manage flows |
 | `scripts/` | Shell helpers for compiling and deploying from the repo root |
 | `deployments.json` | Last-known deployed runtime addresses for `evm` and `pvm` |
-| `ADR.md` | Architectural decision record for the Smart Runtime model |
-| `DOCUMENTATION.md` | Detailed technical documentation and operational notes |
 
 ## Current Runtime Surface
 
@@ -174,8 +173,8 @@ After deployment, upgrades happen through the `Upgrade` module via the standard 
 
 ## Documentation Map
 
-- [DOCUMENTATION.md](DOCUMENTATION.md): full technical documentation
-- [ADR.md](ADR.md): architectural decision record
+- [docs/DOCUMENTATION.md](docs/DOCUMENTATION.md): full technical documentation
+- [docs/ADR.md](docs/ADR.md): architectural decision record
 - [CLAUDE.md](CLAUDE.md): repository context for AI/code agents
 
 ## License
