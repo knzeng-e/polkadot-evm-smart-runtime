@@ -814,3 +814,12 @@ export const REQUIRED_PALLET_IDS = new Set(
 export function getPalletById(id: string): PalletDef | undefined {
 	return PALLET_REGISTRY.find((p) => p.id === id);
 }
+
+/** Global map from 4-byte selector → function name, built from all known pallets. */
+export const GLOBAL_SELECTOR_MAP: Map<`0x${string}`, string> = new Map(
+	PALLET_REGISTRY.flatMap((p) =>
+		(p.abi as AbiFunction[])
+			.filter((item): item is AbiFunction => item.type === "function")
+			.map((fn) => [toFunctionSelector(fn), fn.name] as [`0x${string}`, string]),
+	),
+);
