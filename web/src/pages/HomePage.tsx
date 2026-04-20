@@ -62,10 +62,10 @@ export default function HomePage() {
 						</div>
 						<div>
 							<h3 className="text-lg font-semibold text-polka-400 font-display mb-1">
-								Deploy a Smart Runtime
+								Deploy a new smart runtime
 							</h3>
 							<p className="text-sm text-text-secondary group-hover:text-text-primary transition-colors">
-								Browse the Smart Pallet catalog, select the pallets your use-case needs, and
+								Browse the Smart Pallets catalog, select the contracts pallets your use-case needs, and
 								deploy a new SmartRuntime with one click.
 							</p>
 						</div>
@@ -84,10 +84,10 @@ export default function HomePage() {
 						</div>
 						<div>
 							<h3 className="text-lg font-semibold text-accent-blue font-display mb-1">
-								Manage a Smart Runtime
+								Manage a SmartRuntime
 							</h3>
 							<p className="text-sm text-text-secondary group-hover:text-text-primary transition-colors">
-								Connect to an existing SmartRuntime to inspect its pallets, add new ones,
+								Connect to an existing smart runtime to inspect its pallets, add new ones,
 								replace old versions, or remove unused ones — forklessly.
 							</p>
 						</div>

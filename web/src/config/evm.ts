@@ -15,7 +15,7 @@ import { privateKeyToAccount } from "viem/accounts";
 export const LOCAL_ETH_RPC_URL = "http://127.0.0.1:8545";
 export const TESTNET_ETH_RPC_URL = "https://services.polkadothub-rpc.com/testnet";
 export const TESTNET_CHAIN_ID = 420420417;
-export const LOCAL_CHAIN_ID = 420420421;
+export const LOCAL_CHAIN_ID = 420420420;
 
 // ---------------------------------------------------------------------------
 // Well-known Substrate dev accounts (PUBLIC test keys — never use for real funds)
@@ -46,8 +46,8 @@ export const devAccounts = [
 // Client factory — cached per URL
 // ---------------------------------------------------------------------------
 
-let _publicClient: PublicClient | null = null;
 let _publicClientUrl = "";
+let _publicClient: PublicClient | null = null;
 
 export function getPublicClient(rpcUrl = LOCAL_ETH_RPC_URL): PublicClient {
 	if (!_publicClient || _publicClientUrl !== rpcUrl) {

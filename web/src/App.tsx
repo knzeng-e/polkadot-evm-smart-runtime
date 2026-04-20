@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { Outlet, Link, useLocation } from "react-router-dom";
 import { LOCAL_ETH_RPC_URL } from "./config/evm";
+import { Outlet, Link, useLocation } from "react-router-dom";
 
 // Global RPC URL stored in module state — simple enough for a dev DApp
 let _rpcUrl = LOCAL_ETH_RPC_URL;
