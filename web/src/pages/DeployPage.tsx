@@ -29,6 +29,7 @@ export default function DeployPage() {
 	const [accountIndex, setAccountIndex] = useState(0);
 	const [deploying, setDeploying] = useState(false);
 	const [log, setLog] = useState<LogEntry[]>([]);
+	const [expandedPallets, setExpandedPallets] = useState<Set<string>>(new Set());
 	const [deployedRuntime, setDeployedRuntime] = useState<string | null>(null);
 	const [activeCategory, setActiveCategory] = useState<PalletCategory | "all">("all");
 
@@ -58,6 +59,14 @@ export default function DeployPage() {
 	function togglePallet(id: string) {
 		if (REQUIRED_PALLET_IDS.has(id)) return;
 		setSelected((prev) => {
+			const next = new Set(prev);
+			next.has(id) ? next.delete(id) : next.add(id);
+			return next;
+		});
+	}
+
+	function toggleExpandedPallet(id: string) {
+		setExpandedPallets((prev) => {
 			const next = new Set(prev);
 			next.has(id) ? next.delete(id) : next.add(id);
 			return next;
@@ -226,8 +235,8 @@ export default function DeployPage() {
 				</h1>
 				<p className="text-text-secondary text-sm leading-relaxed max-w-2xl">
 					Select the Smart Pallets your application needs. Core pallets are always included.
-					Click Deploy to deploy each pallet then assemble the SmartRuntime with a single
-					on-chain <code className="bg-white/[0.06] px-1 rounded text-xs">constructor</code> call.
+					Click any pallet card to inspect its function surface, then use the action button to
+					include or remove optional pallets before deployment.
 				</p>
 			</div>
 
@@ -271,7 +280,23 @@ export default function DeployPage() {
 							key={pallet.id}
 							pallet={pallet}
 							selected={selected.has(pallet.id)}
-							onToggle={togglePallet}
+							expanded={expandedPallets.has(pallet.id)}
+							onToggleExpanded={toggleExpandedPallet}
+							action={
+								pallet.required ? (
+									<span className="badge bg-white/[0.05] text-text-muted text-[10px]">
+										Included
+									</span>
+								) : (
+									<button
+										type="button"
+										onClick={() => togglePallet(pallet.id)}
+										className={`text-xs ${selected.has(pallet.id) ? "btn-danger" : "btn-secondary"}`}
+									>
+										{selected.has(pallet.id) ? "Remove" : "Add"}
+									</button>
+								)
+							}
 						/>
 					))}
 				</div>

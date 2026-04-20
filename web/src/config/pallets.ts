@@ -1,4 +1,4 @@
-import { toFunctionSelector, type Abi, type AbiFunction } from "viem";
+import { toFunctionSelector, type Abi, type AbiFunction, type AbiParameter } from "viem";
 import { bytecodes } from "./bytecodes";
 
 // ---------------------------------------------------------------------------
@@ -38,6 +38,26 @@ export function selectorsFromAbi(abi: Abi): `0x${string}`[] {
 	return (abi as AbiFunction[])
 		.filter((item) => item.type === "function")
 		.map((fn) => toFunctionSelector(fn as AbiFunction));
+}
+
+function formatAbiParameterType(parameter: AbiParameter): string {
+	if (!parameter.type.startsWith("tuple")) {
+		return parameter.type;
+	}
+
+	const suffix = parameter.type.slice("tuple".length);
+	const tupleParameter = parameter as AbiParameter & { components?: readonly AbiParameter[] };
+	const components = (tupleParameter.components ?? []).map((component: AbiParameter) =>
+		formatAbiParameterType(component),
+	);
+
+	return `(${components.join(",")})${suffix}`;
+}
+
+export function functionSignaturesFromAbi(abi: Abi): string[] {
+	return (abi as AbiFunction[])
+		.filter((item) => item.type === "function")
+		.map((fn) => `${fn.name}(${(fn.inputs ?? []).map(formatAbiParameterType).join(",")})`);
 }
 
 const diamondCutAbi: Abi = [

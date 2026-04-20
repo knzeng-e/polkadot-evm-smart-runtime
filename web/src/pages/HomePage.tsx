@@ -1,11 +1,22 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { PALLET_REGISTRY, categoryMeta, type PalletCategory } from "../config/pallets";
+import PalletCard from "../components/PalletCard";
 
 export default function HomePage() {
+	const [expandedPallets, setExpandedPallets] = useState<Set<string>>(new Set());
 	const categories = (["core", "access", "token", "app"] as PalletCategory[]).map((cat) => ({
 		cat,
 		pallets: PALLET_REGISTRY.filter((p) => p.category === cat),
 	}));
+
+	function toggleExpandedPallet(id: string) {
+		setExpandedPallets((prev) => {
+			const next = new Set(prev);
+			next.has(id) ? next.delete(id) : next.add(id);
+			return next;
+		});
+	}
 
 	return (
 		<div className="space-y-10 animate-fade-in">
@@ -108,18 +119,14 @@ export default function HomePage() {
 							</div>
 							<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
 								{pallets.map((p) => (
-									<div key={p.id} className="card p-3">
-										<div className="flex items-center justify-between mb-1">
-											<span className="text-sm font-semibold text-text-primary font-display">{p.name}</span>
-											{p.required && (
-												<span className="badge bg-white/[0.05] text-text-muted text-[10px]">Required</span>
-											)}
-										</div>
-										<p className="text-xs text-text-secondary leading-relaxed">{p.description}</p>
-										<p className="mt-2 text-[10px] text-text-muted font-mono">
-											{p.abi.filter((x) => x.type === "function").length} functions
-										</p>
-									</div>
+									<PalletCard
+										key={p.id}
+										pallet={p}
+										selected={false}
+										expanded={expandedPallets.has(p.id)}
+										onToggleExpanded={toggleExpandedPallet}
+										showCategoryBadge={false}
+									/>
 								))}
 							</div>
 						</div>
