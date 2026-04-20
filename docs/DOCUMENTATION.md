@@ -25,7 +25,7 @@ The repository currently contains four main surfaces:
 
 ### Frontend
 
-- `web/`: a small manager UI for deploying a new runtime from a selected pallet set, loading an existing runtime, and performing add/replace/remove pallet flows
+- `web/`: a small manager UI for deploying a new runtime from a selected pallet set, loading an existing runtime, performing add/replace/remove pallet flows, and interacting with live pallet functions
 
 ### Scripts
 
@@ -214,6 +214,7 @@ The UI provides:
 - a home page with the pallet catalog
 - a deploy page to assemble and deploy a new runtime
 - a manage page to inspect and upgrade an existing runtime
+- an interact page to run direct read/write calls against a loaded runtime
 
 ### 8.2 How It Works
 
@@ -246,7 +247,7 @@ Because the frontend bytecode generator reads EVM artifacts, the web manager cur
 
 That means:
 
-- the web app is appropriate for EVM deployment and EVM-side upgrade flows
+- the web app is appropriate for EVM deployment, interaction, and EVM-side upgrade flows
 - PVM deployment and upgrade flows should currently use Hardhat/scripts instead of the web UI
 
 ### 8.5 Accounts
@@ -319,3 +320,4 @@ For a new reader:
 5. `contracts/evm/test/SmartRuntime.test.ts`
 6. `web/src/pages/DeployPage.tsx`
 7. `web/src/pages/ManagePage.tsx`
+8. `web/src/pages/InteractPage.tsx`

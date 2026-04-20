@@ -1,6 +1,6 @@
 import type { Address, Abi } from "viem";
 import { useState, useEffect, useCallback } from "react";
-import { useOutletContext, useSearchParams } from "react-router-dom";
+import { Link, useOutletContext, useSearchParams } from "react-router-dom";
 import { getPublicClient, getWalletClient, devAccounts } from "../config/evm";
 import { diamondLoupeAbi, diamondCutAbi, ownershipAbi } from "../config/abis";
 
@@ -407,13 +407,21 @@ export default function ManagePage() {
 					forkless upgrades via{" "}
 					<code className="bg-white/[0.06] px-1 rounded text-xs">diamondCut</code>.
 					ERC-2535 allows granular upgrades — add, replace, or remove individual functions
-					without touching the rest of the pallet.
+					without touching the rest of the pallet. For direct read/write calls, use the{" "}
+					<Link to="/interact" className="text-polka-400 hover:underline">Interact</Link> tab.
 				</p>
 			</div>
 
 			{/* Connect card */}
 			<div className="card space-y-4">
-				<h2 className="section-title">Connect to Runtime</h2>
+				<div className="flex flex-wrap items-center justify-between gap-3">
+					<h2 className="section-title">Connect to Runtime</h2>
+					{liveFacets.length > 0 && (
+						<Link to={`/interact?address=${runtimeAddress.trim()}`} className="btn-secondary text-xs">
+							Open Interact
+						</Link>
+					)}
+				</div>
 				<div>
 					<label className="label">SmartRuntime Address</label>
 					<div className="flex gap-2">

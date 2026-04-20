@@ -57,7 +57,11 @@ function formatAbiParameterType(parameter: AbiParameter): string {
 export function functionSignaturesFromAbi(abi: Abi): string[] {
 	return (abi as AbiFunction[])
 		.filter((item) => item.type === "function")
-		.map((fn) => `${fn.name}(${(fn.inputs ?? []).map(formatAbiParameterType).join(",")})`);
+		.map((fn) => formatFunctionSignature(fn));
+}
+
+export function formatFunctionSignature(fn: AbiFunction): string {
+	return `${fn.name}(${(fn.inputs ?? []).map(formatAbiParameterType).join(",")})`;
 }
 
 const diamondCutAbi: Abi = [
@@ -841,5 +845,35 @@ export const GLOBAL_SELECTOR_MAP: Map<`0x${string}`, string> = new Map(
 		(p.abi as AbiFunction[])
 			.filter((item): item is AbiFunction => item.type === "function")
 			.map((fn) => [toFunctionSelector(fn), fn.name] as [`0x${string}`, string]),
+	),
+);
+
+export interface GlobalFunctionInfo {
+	palletId: string;
+	palletName: string;
+	palletCategory: PalletCategory;
+	selector: `0x${string}`;
+	signature: string;
+	abi: AbiFunction;
+}
+
+export const GLOBAL_FUNCTION_INFO_MAP: Map<`0x${string}`, GlobalFunctionInfo> = new Map(
+	PALLET_REGISTRY.flatMap((p) =>
+		(p.abi as AbiFunction[])
+			.filter((item): item is AbiFunction => item.type === "function")
+			.map((fn) => {
+				const selector = toFunctionSelector(fn);
+				return [
+					selector,
+					{
+						palletId: p.id,
+						palletName: p.name,
+						palletCategory: p.category,
+						selector,
+						signature: formatFunctionSignature(fn),
+						abi: fn,
+					},
+				] as [`0x${string}`, GlobalFunctionInfo];
+			}),
 	),
 );

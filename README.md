@@ -16,7 +16,7 @@ Instead of deploying one large monolithic contract and replacing it wholesale, t
   - Token: fungible, non-fungible, multi-asset
   - App: proof of existence
 - Hardhat deploy/test flows for both EVM and PVM targets
-- A small web manager for deploying and managing runtimes
+- A small web manager for deploying, upgrading, and interacting with runtimes
 - Shell wrappers for common deployment workflows
 
 ## Mental Model
@@ -39,7 +39,7 @@ One runtime address
 | `contracts/evm/` | Canonical Solidity contracts, Hardhat config, EVM tests, EVM deploy scripts |
 | `contracts/pvm/` | Mirrored Solidity sources compiled for PolkaVM / pallet-revive with `resolc` |
 | `docs/` | Architecture and technical documentation for the Smart Runtime model |
-| `web/` | Runtime manager UI for browsing pallets and performing deploy/manage flows |
+| `web/` | Runtime manager UI for browsing pallets and performing deploy/manage/interact flows |
 | `scripts/` | Shell helpers for compiling and deploying from the repo root |
 | `deployments.json` | Last-known deployed runtime addresses for `evm` and `pvm` |
 
@@ -169,7 +169,7 @@ After deployment, upgrades happen through the `Upgrade` module via the standard 
 ## Current Operational Notes
 
 - At the runtime level, the diamond model sidesteps the single-contract EVM bytecode ceiling by distributing logic across facets. Each facet still has its own contract-size budget.
-- The web manager currently generates and ships bytecodes from `contracts/evm/artifacts`, so it should be treated as an EVM-focused deploy/manage UI. PVM deployment is currently best handled through the Hardhat and shell-script flows.
+- The web manager currently generates and ships bytecodes from `contracts/evm/artifacts`, so it should be treated as an EVM-focused deploy/manage/interact UI. PVM deployment is currently best handled through the Hardhat and shell-script flows.
 - The web manager uses well-known dev accounts out of the box. It is intended for local development and controlled demos, not production wallet integration.
 - PVM tests run against a live RPC endpoint rather than an in-process simulated network.
 

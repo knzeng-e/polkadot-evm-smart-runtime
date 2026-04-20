@@ -7,6 +7,7 @@ import "./index.css";
 const HomePage = lazy(() => import("./pages/HomePage"));
 const DeployPage = lazy(() => import("./pages/DeployPage"));
 const ManagePage = lazy(() => import("./pages/ManagePage"));
+const InteractPage = lazy(() => import("./pages/InteractPage"));
 
 const routeFallback = (
 	<div className="card animate-pulse space-y-3">
@@ -42,6 +43,14 @@ createRoot(document.getElementById("root")!).render(
 						element={
 							<Suspense fallback={routeFallback}>
 								<ManagePage />
+							</Suspense>
+						}
+					/>
+					<Route
+						path="interact"
+						element={
+							<Suspense fallback={routeFallback}>
+								<InteractPage />
 							</Suspense>
 						}
 					/>
