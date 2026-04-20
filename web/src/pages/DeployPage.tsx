@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useOutletContext, Link } from "react-router-dom";
 import type { Abi } from "viem";
 import { getPublicClient, getWalletClient } from "../config/evm";
+import { diamondCutAbi } from "../config/abis";
 import {
 	PALLET_REGISTRY,
 	REQUIRED_PALLET_IDS,
@@ -35,6 +36,25 @@ export default function DeployPage() {
 		setLog((prev) => [...prev, { kind, text }]);
 	}
 
+	function requireSuccessfulCreate(
+		label: string,
+		receipt: { status: string; contractAddress?: `0x${string}` | null },
+	) {
+		if (receipt.status !== "success") {
+			throw new Error(`${label} reverted on-chain`);
+		}
+		if (!receipt.contractAddress) {
+			throw new Error(`${label}: no contract address in receipt`);
+		}
+		return receipt.contractAddress;
+	}
+
+	function requireSuccessfulTx(label: string, receipt: { status: string }) {
+		if (receipt.status !== "success") {
+			throw new Error(`${label} reverted on-chain`);
+		}
+	}
+
 	function togglePallet(id: string) {
 		if (REQUIRED_PALLET_IDS.has(id)) return;
 		setSelected((prev) => {
@@ -45,6 +65,8 @@ export default function DeployPage() {
 	}
 
 	const selectedPallets = PALLET_REGISTRY.filter((p) => selected.has(p.id));
+	const bootstrapPallets = selectedPallets.filter((p) => p.required);
+	const optionalPallets = selectedPallets.filter((p) => !p.required);
 
 	async function deployRuntime() {
 		setDeploying(true);
@@ -59,11 +81,12 @@ export default function DeployPage() {
 			push("info", `Deployer: ${owner}`);
 			push("info", `Network: ${rpcUrl}`);
 			push("info", `Pallets selected: ${selectedPallets.map((p) => p.name).join(", ")}`);
+			push("info", `Bootstrap pallets: ${bootstrapPallets.map((p) => p.name).join(", ")}`);
 			push("info", "─────────────────────────────────");
 
-			// Deploy each pallet
-			const deployedPallets: { pallet: PalletDef; address: `0x${string}` }[] = [];
-			for (const pallet of selectedPallets) {
+			// Deploy the required core pallets first so the initial constructor payload stays small.
+			const deployedBootstrapPallets: { pallet: PalletDef; address: `0x${string}` }[] = [];
+			for (const pallet of bootstrapPallets) {
 				if (pallet.bytecode === "0x" || !pallet.bytecode) {
 					push("error", `${pallet.name}: no bytecode — recompile contracts`);
 					return;
@@ -74,15 +97,15 @@ export default function DeployPage() {
 					bytecode: pallet.bytecode,
 				});
 				const receipt = await publicClient.waitForTransactionReceipt({ hash, timeout: 120_000 });
-				if (!receipt.contractAddress) throw new Error(`${pallet.name}: no contract address in receipt`);
-				push("success", `${pallet.name}: ${receipt.contractAddress}`);
-				deployedPallets.push({ pallet, address: receipt.contractAddress });
+				const contractAddress = requireSuccessfulCreate(`${pallet.name} deployment`, receipt);
+				push("success", `${pallet.name}: ${contractAddress}`);
+				deployedBootstrapPallets.push({ pallet, address: contractAddress });
 			}
 
 			// Build FacetCut array
 			push("info", "─────────────────────────────────");
-			push("pending", "Building initial FacetCut array...");
-			const initialCuts = deployedPallets.map(({ pallet, address }) => ({
+			push("pending", "Building bootstrap FacetCut array...");
+			const initialCuts = deployedBootstrapPallets.map(({ pallet, address }) => ({
 				facetAddress: address,
 				action: 0, // Add
 				functionSelectors: selectorsFromAbi(pallet.abi),
@@ -128,14 +151,57 @@ export default function DeployPage() {
 				timeout: 120_000,
 			});
 
-			if (!runtimeReceipt.contractAddress) {
-				throw new Error("SmartRuntime: no contract address in receipt");
+			const runtimeAddress = requireSuccessfulCreate("SmartRuntime deployment", runtimeReceipt);
+			push("success", `SmartRuntime: ${runtimeAddress}`);
+			setDeployedRuntime(runtimeAddress);
+
+			// Add optional pallets incrementally after the runtime exists. This avoids
+			// very large constructor payloads on the local chain.
+			for (const pallet of optionalPallets) {
+				if (pallet.bytecode === "0x" || !pallet.bytecode) {
+					push("error", `${pallet.name}: no bytecode — recompile contracts`);
+					return;
+				}
+
+				push("pending", `Deploying ${pallet.name}...`);
+				const deployHash = await walletClient.deployContract({
+					abi: pallet.abi as Abi,
+					bytecode: pallet.bytecode,
+				});
+				const deployReceipt = await publicClient.waitForTransactionReceipt({
+					hash: deployHash,
+					timeout: 120_000,
+				});
+				const palletAddress = requireSuccessfulCreate(`${pallet.name} deployment`, deployReceipt);
+				push("success", `${pallet.name}: ${palletAddress}`);
+
+				push("pending", `Registering ${pallet.name} via diamondCut(Add)...`);
+				const cutHash = await walletClient.writeContract({
+					address: runtimeAddress,
+					abi: diamondCutAbi as Abi,
+					functionName: "diamondCut",
+					args: [
+						[
+							{
+								facetAddress: palletAddress,
+								action: 0,
+								functionSelectors: selectorsFromAbi(pallet.abi),
+							},
+						],
+						ZERO_ADDR,
+						"0x",
+					],
+				});
+				const cutReceipt = await publicClient.waitForTransactionReceipt({
+					hash: cutHash,
+					timeout: 120_000,
+				});
+				requireSuccessfulTx(`diamondCut(Add ${pallet.name})`, cutReceipt);
+				push("success", `${pallet.name} added ✓`);
 			}
 
-			push("success", `SmartRuntime: ${runtimeReceipt.contractAddress}`);
 			push("info", "─────────────────────────────────");
 			push("success", "Deployment complete!");
-			setDeployedRuntime(runtimeReceipt.contractAddress);
 		} catch (e) {
 			push("error", `${e instanceof Error ? e.message : String(e)}`);
 		} finally {

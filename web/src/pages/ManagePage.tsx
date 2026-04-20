@@ -1,17 +1,19 @@
+import type { Address, Abi } from "viem";
 import { useState, useEffect, useCallback } from "react";
 import { useOutletContext, useSearchParams } from "react-router-dom";
-import type { Address, Abi } from "viem";
 import { getPublicClient, getWalletClient, devAccounts } from "../config/evm";
 import { diamondLoupeAbi, diamondCutAbi, ownershipAbi } from "../config/abis";
+
 import {
-	PALLET_REGISTRY,
-	selectorsFromAbi,
 	categoryMeta,
 	getPalletById,
 	type PalletDef,
+	PALLET_REGISTRY,
+	selectorsFromAbi,
 } from "../config/pallets";
-import TxStatus, { type LogEntry } from "../components/TxStatus";
+
 import AccountSelector from "../components/AccountSelector";
+import TxStatus, { type LogEntry } from "../components/TxStatus";
 
 interface OutletCtx { rpcUrl: string }
 const ZERO_ADDR = "0x0000000000000000000000000000000000000000" as const;
@@ -25,25 +27,41 @@ interface LiveFacet {
 
 export default function ManagePage() {
 	const { rpcUrl } = useOutletContext<OutletCtx>();
+	
 	const [searchParams] = useSearchParams();
-
-	const [runtimeAddress, setRuntimeAddress] = useState(searchParams.get("address") ?? "");
-	const [accountIndex, setAccountIndex] = useState(0);
-
-	const [liveFacets, setLiveFacets] = useState<LiveFacet[]>([]);
-	const [ownerAddress, setOwnerAddress] = useState<string | null>(null);
-	const [loading, setLoading] = useState(false);
-	const [loadError, setLoadError] = useState<string | null>(null);
-
-	const [log, setLog] = useState<LogEntry[]>([]);
 	const [txBusy, setTxBusy] = useState(false);
-
+	const [loading, setLoading] = useState(false);
+	const [log, setLog] = useState<LogEntry[]>([]);
 	const [addPalletId, setAddPalletId] = useState("");
-	const [replaceFacetAddr, setReplaceFacetAddr] = useState<`0x${string}` | "">("");
+	const [accountIndex, setAccountIndex] = useState(0);
 	const [replacePalletId, setReplacePalletId] = useState("");
+	const [liveFacets, setLiveFacets] = useState<LiveFacet[]>([]);
+	const [loadError, setLoadError] = useState<string | null>(null);
+	const [ownerAddress, setOwnerAddress] = useState<string | null>(null);
+	const [replaceFacetAddr, setReplaceFacetAddr] = useState<`0x${string}` | "">("");
+	const [runtimeAddress, setRuntimeAddress] = useState(searchParams.get("address") ?? "");
 
 	function push(kind: LogEntry["kind"], text: string) {
 		setLog((prev) => [...prev, { kind, text }]);
+	}
+
+	function requireSuccessfulCreate(
+		label: string,
+		receipt: { status: string; contractAddress?: `0x${string}` | null },
+	) {
+		if (receipt.status !== "success") {
+			throw new Error(`${label} reverted on-chain`);
+		}
+		if (!receipt.contractAddress) {
+			throw new Error(`${label}: no contract address in receipt`);
+		}
+		return receipt.contractAddress;
+	}
+
+	function requireSuccessfulTx(label: string, receipt: { status: string }) {
+		if (receipt.status !== "success") {
+			throw new Error(`${label} reverted on-chain`);
+		}
 	}
 
 	// -------------------------------------------------------------------------
@@ -62,7 +80,7 @@ export default function ManagePage() {
 
 			const code = await client.getCode({ address: addr });
 			if (!code || code === "0x") {
-				setLoadError("No contract found at this address.");
+				setLoadError("No contract found at this address on the current RPC URL.");
 				return;
 			}
 
@@ -128,8 +146,8 @@ export default function ManagePage() {
 				bytecode: pallet.bytecode,
 			});
 			const receipt = await client.waitForTransactionReceipt({ hash: deployHash, timeout: 120_000 });
-			if (!receipt.contractAddress) throw new Error("No contract address in receipt");
-			push("success", `${pallet.name} deployed: ${receipt.contractAddress}`);
+			const contractAddress = requireSuccessfulCreate(`${pallet.name} deployment`, receipt);
+			push("success", `${pallet.name} deployed: ${contractAddress}`);
 
 			push("pending", `Registering in SmartRuntime via diamondCut…`);
 			const cutHash = await wallet.writeContract({
@@ -137,12 +155,13 @@ export default function ManagePage() {
 				abi: diamondCutAbi as Abi,
 				functionName: "diamondCut",
 				args: [
-					[{ facetAddress: receipt.contractAddress, action: 0, functionSelectors: selectorsFromAbi(pallet.abi) }],
+					[{ facetAddress: contractAddress, action: 0, functionSelectors: selectorsFromAbi(pallet.abi) }],
 					ZERO_ADDR,
 					"0x",
 				],
 			});
-			await client.waitForTransactionReceipt({ hash: cutHash, timeout: 120_000 });
+			const cutReceipt = await client.waitForTransactionReceipt({ hash: cutHash, timeout: 120_000 });
+			requireSuccessfulTx(`diamondCut(Add ${pallet.name})`, cutReceipt);
 			push("success", `${pallet.name} added ✓`);
 			setAddPalletId("");
 			await loadRuntime();
@@ -173,8 +192,8 @@ export default function ManagePage() {
 				bytecode: newPallet.bytecode,
 			});
 			const receipt = await client.waitForTransactionReceipt({ hash: deployHash, timeout: 120_000 });
-			if (!receipt.contractAddress) throw new Error("No contract address in receipt");
-			push("success", `New pallet deployed: ${receipt.contractAddress}`);
+			const contractAddress = requireSuccessfulCreate(`${newPallet.name} deployment`, receipt);
+			push("success", `New pallet deployed: ${contractAddress}`);
 
 			push("pending", `Replacing via diamondCut (action=1)…`);
 			const cutHash = await wallet.writeContract({
@@ -182,12 +201,13 @@ export default function ManagePage() {
 				abi: diamondCutAbi as Abi,
 				functionName: "diamondCut",
 				args: [
-					[{ facetAddress: receipt.contractAddress, action: 1, functionSelectors: oldFacet.selectors }],
+					[{ facetAddress: contractAddress, action: 1, functionSelectors: oldFacet.selectors }],
 					ZERO_ADDR,
 					"0x",
 				],
 			});
-			await client.waitForTransactionReceipt({ hash: cutHash, timeout: 120_000 });
+			const cutReceipt = await client.waitForTransactionReceipt({ hash: cutHash, timeout: 120_000 });
+			requireSuccessfulTx(`diamondCut(Replace ${newPallet.name})`, cutReceipt);
 			push("success", "Pallet replaced ✓");
 			setReplaceFacetAddr("");
 			setReplacePalletId("");
@@ -222,7 +242,8 @@ export default function ManagePage() {
 					"0x",
 				],
 			});
-			await client.waitForTransactionReceipt({ hash, timeout: 120_000 });
+			const receipt = await client.waitForTransactionReceipt({ hash, timeout: 120_000 });
+			requireSuccessfulTx(`diamondCut(Remove ${facet.address})`, receipt);
 			push("success", "Pallet removed ✓");
 			await loadRuntime();
 		} catch (e) {

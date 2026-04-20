@@ -6,6 +6,7 @@ import { defineChain, toFunctionSelector, type Abi, type AbiFunction, type Chain
 const DEPLOYMENTS_JSON = path.resolve(__dirname, '../../../deployments.json');
 
 const FacetCutAction = { Add: 0, Replace: 1, Remove: 2 } as const;
+const ZERO_ADDR = '0x0000000000000000000000000000000000000000' as const;
 
 const DEFAULT_RPC_URLS: Record<string, string> = {
   local: process.env.ETH_RPC_HTTP || 'http://127.0.0.1:8545',
@@ -141,6 +142,10 @@ async function deployPallet(hre: HardhatRuntimeEnvironment, clients: DeploymentC
   });
   const receipt = await publicClient.waitForTransactionReceipt({ hash, timeout: 120_000 });
 
+  if (receipt.status !== 'success') {
+    throw new Error(`${name} deploy tx ${hash} reverted on-chain`);
+  }
+
   if (!receipt.contractAddress) {
     throw new Error(`${name} deploy tx ${hash} has no contract`);
   }
@@ -151,6 +156,40 @@ async function deployPallet(hre: HardhatRuntimeEnvironment, clients: DeploymentC
     address: receipt.contractAddress,
     abi: artifact.abi as Abi
   };
+}
+
+async function addPalletToRuntime(
+  clients: DeploymentClients,
+  runtimeAddress: `0x${string}`,
+  cutAbi: Abi,
+  pallet: { address: `0x${string}`; abi: Abi },
+  name: string
+) {
+  const { walletClient, publicClient } = clients;
+
+  const hash = await walletClient.writeContract({
+    address: runtimeAddress,
+    abi: cutAbi,
+    functionName: 'diamondCut',
+    args: [
+      [
+        {
+          facetAddress: pallet.address,
+          action: FacetCutAction.Add,
+          functionSelectors: selectorsFromAbi(pallet.abi)
+        }
+      ],
+      ZERO_ADDR,
+      '0x'
+    ]
+  });
+  const receipt = await publicClient.waitForTransactionReceipt({ hash, timeout: 120_000 });
+
+  if (receipt.status !== 'success') {
+    throw new Error(`diamondCut(Add ${name}) tx ${hash} reverted on-chain`);
+  }
+
+  console.log(`  ✓ ${name} added to SmartRuntime`);
 }
 
 export async function deploySmartRuntime(hre: HardhatRuntimeEnvironment) {
@@ -164,13 +203,6 @@ export async function deploySmartRuntime(hre: HardhatRuntimeEnvironment) {
   const cutPallet = await deployPallet(hre, clients, 'DiamondCutPallet');
   const loupePallet = await deployPallet(hre, clients, 'DiamondLoupePallet');
   const ownershipPallet = await deployPallet(hre, clients, 'OwnershipPallet');
-  const accessControlPallet = await deployPallet(hre, clients, 'AccessControlPallet');
-  const pausablePallet = await deployPallet(hre, clients, 'PausablePallet');
-  const poePallet = await deployPallet(hre, clients, 'ProofOfExistencePallet');
-  const fungibleTokenPallet = await deployPallet(hre, clients, 'FungibleTokenPallet');
-  const nonFungibleTokenPallet = await deployPallet(hre, clients, 'NonFungibleTokenPallet');
-  const multiAssetTokenPallet = await deployPallet(hre, clients, 'MultiAssetTokenPallet');
-
   const initialCuts = [
     {
       facetAddress: cutPallet.address,
@@ -186,36 +218,6 @@ export async function deploySmartRuntime(hre: HardhatRuntimeEnvironment) {
       facetAddress: ownershipPallet.address,
       action: FacetCutAction.Add,
       functionSelectors: selectorsFromAbi(ownershipPallet.abi)
-    },
-    {
-      facetAddress: accessControlPallet.address,
-      action: FacetCutAction.Add,
-      functionSelectors: selectorsFromAbi(accessControlPallet.abi)
-    },
-    {
-      facetAddress: pausablePallet.address,
-      action: FacetCutAction.Add,
-      functionSelectors: selectorsFromAbi(pausablePallet.abi)
-    },
-    {
-      facetAddress: poePallet.address,
-      action: FacetCutAction.Add,
-      functionSelectors: selectorsFromAbi(poePallet.abi)
-    },
-    {
-      facetAddress: fungibleTokenPallet.address,
-      action: FacetCutAction.Add,
-      functionSelectors: selectorsFromAbi(fungibleTokenPallet.abi)
-    },
-    {
-      facetAddress: nonFungibleTokenPallet.address,
-      action: FacetCutAction.Add,
-      functionSelectors: selectorsFromAbi(nonFungibleTokenPallet.abi)
-    },
-    {
-      facetAddress: multiAssetTokenPallet.address,
-      action: FacetCutAction.Add,
-      functionSelectors: selectorsFromAbi(multiAssetTokenPallet.abi)
     }
   ];
 
@@ -227,12 +229,16 @@ export async function deploySmartRuntime(hre: HardhatRuntimeEnvironment) {
   const runtimeHash = await deployContractWithFallbackGas(clients, 'SmartRuntime', {
     abi: runtimeArtifact.abi as Abi,
     bytecode: runtimeArtifact.bytecode as `0x${string}`,
-    args: [owner, initialCuts, '0x0000000000000000000000000000000000000000', '0x']
+    args: [owner, initialCuts, ZERO_ADDR, '0x']
   });
   const runtimeReceipt = await publicClient.waitForTransactionReceipt({
     hash: runtimeHash,
     timeout: 120_000
   });
+
+  if (runtimeReceipt.status !== 'success') {
+    throw new Error(`SmartRuntime deploy tx ${runtimeHash} reverted on-chain`);
+  }
 
   if (!runtimeReceipt.contractAddress) {
     throw new Error(`SmartRuntime deploy tx ${runtimeHash} has no contract`);
@@ -240,6 +246,20 @@ export async function deploySmartRuntime(hre: HardhatRuntimeEnvironment) {
 
   const runtimeAddress = runtimeReceipt.contractAddress;
   console.log(`  ✓ SmartRuntime: ${runtimeAddress}`);
+
+  console.log('\nDeploying optional Smart Pallets and registering them via diamondCut...');
+  const accessControlPallet = await deployPallet(hre, clients, 'AccessControlPallet');
+  await addPalletToRuntime(clients, runtimeAddress, cutPallet.abi, accessControlPallet, 'AccessControlPallet');
+  const pausablePallet = await deployPallet(hre, clients, 'PausablePallet');
+  await addPalletToRuntime(clients, runtimeAddress, cutPallet.abi, pausablePallet, 'PausablePallet');
+  const poePallet = await deployPallet(hre, clients, 'ProofOfExistencePallet');
+  await addPalletToRuntime(clients, runtimeAddress, cutPallet.abi, poePallet, 'ProofOfExistencePallet');
+  const fungibleTokenPallet = await deployPallet(hre, clients, 'FungibleTokenPallet');
+  await addPalletToRuntime(clients, runtimeAddress, cutPallet.abi, fungibleTokenPallet, 'FungibleTokenPallet');
+  const nonFungibleTokenPallet = await deployPallet(hre, clients, 'NonFungibleTokenPallet');
+  await addPalletToRuntime(clients, runtimeAddress, cutPallet.abi, nonFungibleTokenPallet, 'NonFungibleTokenPallet');
+  const multiAssetTokenPallet = await deployPallet(hre, clients, 'MultiAssetTokenPallet');
+  await addPalletToRuntime(clients, runtimeAddress, cutPallet.abi, multiAssetTokenPallet, 'MultiAssetTokenPallet');
 
   updateDeployments('evm', runtimeAddress);
   console.log('\n✓ Updated deployments.json');
