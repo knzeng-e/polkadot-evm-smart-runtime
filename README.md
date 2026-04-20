@@ -4,6 +4,8 @@ Polkadot Smart Runtime is a modular smart-contract system that applies the ERC-2
 
 Instead of deploying one large monolithic contract and replacing it wholesale, the project treats the diamond proxy as a long-lived `SmartRuntime` and the facets as upgradeable pallets. New behavior is introduced by adding, replacing, or removing functions through `diamondCut`, which gives the system a forkless-upgrade workflow similar in spirit to a native Polkadot runtime upgrade. A second practical benefit is that the runtime can grow beyond the default EVM single-contract bytecode ceiling by splitting logic across multiple facet contracts behind one stable address.
 
+![](./docs/Polkadot%20Smart%20runtimes.png)
+
 ## What This Project Contains
 
 - A diamond-based runtime contract in Solidity (`contracts/evm/contracts/Runtime.sol`)
