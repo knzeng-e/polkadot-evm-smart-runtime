@@ -375,12 +375,20 @@ export default function DeployPage() {
 							<p className="text-xs text-text-tertiary mb-1">Contract Address</p>
 							<code className="text-sm font-mono text-text-primary break-all">{deployedRuntime}</code>
 						</div>
-						<Link
-							to={`/manage?address=${deployedRuntime}`}
-							className="btn-secondary text-sm inline-flex items-center gap-1.5"
-						>
-							Manage this Runtime →
-						</Link>
+						<div className="flex flex-wrap gap-2">
+							<Link
+								to={`/manage?address=${deployedRuntime}`}
+								className="btn-secondary text-sm inline-flex items-center gap-1.5"
+							>
+								Manage this Runtime →
+							</Link>
+							<Link
+								to={`/interact?address=${deployedRuntime}`}
+								className="btn-secondary text-sm inline-flex items-center gap-1.5 border-accent-green/20 text-accent-green hover:bg-accent-green/10"
+							>
+								Interact with Runtime →
+							</Link>
+						</div>
 					</div>
 				)}
 			</div>

@@ -141,6 +141,10 @@ npm run codegen
 npm run dev
 ```
 
+The web UI exposes dedicated `Deploy Runtime`, `Manage Runtime`, and `Interact` flows.
+After a successful deployment, the deploy page links directly to both the manage and interact views for the newly created runtime.
+The interact view supports direct read/write calls against the loaded runtime, shows inline pending transaction state for writes, and opens a confirmation modal when a write succeeds or fails.
+
 ## Testnet Deployment
 
 For testnet deploys, configure the Hardhat private key variable first:

@@ -214,7 +214,7 @@ The UI provides:
 - a home page with the pallet catalog
 - a deploy page to assemble and deploy a new runtime
 - a manage page to inspect and upgrade an existing runtime
-- an interact page to run direct read/write calls against a loaded runtime
+- an interact page, exposed as a dedicated `Interact` tab, to run direct read/write calls against a loaded runtime
 
 ### 8.2 How It Works
 
@@ -255,6 +255,15 @@ That means:
 The frontend uses well-known dev accounts from `web/src/config/evm.ts`.
 
 This is convenient for local development but should not be treated as a production wallet model.
+
+### 8.6 Interaction UX
+
+The web flow now includes a dedicated interaction path:
+
+- after a successful deployment, the deploy page offers direct links to both the manage and interact views for that runtime address
+- the interact page derives its callable function list from the pallet selectors currently registered on-chain
+- read calls render their return values in the output panel
+- write calls show inline progress while waiting for signature or confirmation, then open a modal with the final success or failure state, including transaction hash and receipt or error details when available
 
 ## 9. Networks and Configuration
 

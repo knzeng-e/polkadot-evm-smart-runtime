@@ -27,6 +27,36 @@ interface RuntimeFunctionOption extends GlobalFunctionInfo {
 	knownPallet?: PalletDef;
 }
 
+type WriteFeedback =
+	| {
+		phase: "signing";
+		functionSignature: string;
+		signer: `0x${string}`;
+	}
+	| {
+		phase: "pending";
+		functionSignature: string;
+		hash: `0x${string}`;
+		signer: `0x${string}`;
+	}
+	| {
+		phase: "confirmed";
+		functionSignature: string;
+		hash: `0x${string}`;
+		signer: `0x${string}`;
+		blockNumber: bigint;
+		gasUsed: bigint;
+	}
+	| {
+		phase: "failed";
+		functionSignature: string;
+		signer: `0x${string}`;
+		message: string;
+		hash?: `0x${string}`;
+	};
+
+type FinalWriteFeedback = Extract<WriteFeedback, { phase: "confirmed" | "failed" }>;
+
 function parseAbiInputValue(value: unknown, parameter: AbiParameter): unknown {
 	const tupleParameter = parameter as AbiParameter & { components?: readonly AbiParameter[] };
 	const arrayMatch = parameter.type.match(/^(.*)\[(\d*)\]$/);
@@ -178,6 +208,8 @@ export default function InteractPage() {
 	const [runtimeFnBusy, setRuntimeFnBusy] = useState(false);
 	const [runtimeFnResult, setRuntimeFnResult] = useState<string | null>(null);
 	const [runtimeFnLog, setRuntimeFnLog] = useState<LogEntry[]>([]);
+	const [runtimeWriteFeedback, setRuntimeWriteFeedback] = useState<WriteFeedback | null>(null);
+	const [transactionModal, setTransactionModal] = useState<FinalWriteFeedback | null>(null);
 
 	function requireSuccessfulTx(label: string, receipt: { status: string }) {
 		if (receipt.status !== "success") throw new Error(`${label} reverted on-chain`);
@@ -187,16 +219,25 @@ export default function InteractPage() {
 		setRuntimeFnLog((prev) => [...prev, { kind, text }]);
 	}
 
-	const loadRuntimeForAddress = useCallback(async (addressInput: string) => {
+	const loadRuntimeForAddress = useCallback(async (
+		addressInput: string,
+		options?: { preserveInteraction?: boolean; preserveModal?: boolean },
+	) => {
 		const addr = addressInput.trim() as Address;
 		if (!addr || !addr.startsWith("0x")) return;
 
 		setLoading(true);
 		setLoadError(null);
-		setLiveFacets([]);
-		setOwnerAddress(null);
-		setRuntimeFnResult(null);
-		setRuntimeFnLog([]);
+		if (!options?.preserveInteraction) {
+			setLiveFacets([]);
+			setOwnerAddress(null);
+			setRuntimeFnResult(null);
+			setRuntimeFnLog([]);
+			setRuntimeWriteFeedback(null);
+		}
+		if (!options?.preserveModal) {
+			setTransactionModal(null);
+		}
 
 		try {
 			const client = getPublicClient(rpcUrl);
@@ -245,8 +286,8 @@ export default function InteractPage() {
 		}
 	}, [rpcUrl]);
 
-	const loadRuntime = useCallback(async () => {
-		await loadRuntimeForAddress(runtimeAddress);
+	const loadRuntime = useCallback(async (options?: { preserveInteraction?: boolean; preserveModal?: boolean }) => {
+		await loadRuntimeForAddress(runtimeAddress, options);
 	}, [loadRuntimeForAddress, runtimeAddress]);
 
 	useEffect(() => {
@@ -254,6 +295,19 @@ export default function InteractPage() {
 		setRuntimeAddress(queryAddress);
 		void loadRuntimeForAddress(queryAddress);
 	}, [loadRuntimeForAddress, queryAddress]);
+
+	useEffect(() => {
+		if (!transactionModal) return;
+
+		function handleKeyDown(event: KeyboardEvent) {
+			if (event.key === "Escape") {
+				setTransactionModal(null);
+			}
+		}
+
+		window.addEventListener("keydown", handleKeyDown);
+		return () => window.removeEventListener("keydown", handleKeyDown);
+	}, [transactionModal]);
 
 	const signerAddress = devAccounts[accountIndex].account.address;
 	const isOwner = ownerAddress
@@ -284,6 +338,9 @@ export default function InteractPage() {
 	const runtimeReadFunctions = runtimeFunctions.filter((fn) => ["view", "pure"].includes(fn.abi.stateMutability));
 	const runtimeWriteFunctions = runtimeFunctions.filter((fn) => !["view", "pure"].includes(fn.abi.stateMutability));
 	const totalSelectorCount = liveFacets.reduce((count, facet) => count + facet.selectors.length, 0);
+	const selectedFunctionIsRead = selectedRuntimeFunction
+		? ["view", "pure"].includes(selectedRuntimeFunction.abi.stateMutability)
+		: true;
 
 	function selectRuntimeFunction(selector: `0x${string}` | "") {
 		setRuntimeFnSelector(selector);
@@ -291,6 +348,8 @@ export default function InteractPage() {
 		setRuntimeFnInputs((nextFunction?.abi.inputs ?? []).map(() => ""));
 		setRuntimeFnResult(null);
 		setRuntimeFnLog([]);
+		setRuntimeWriteFeedback(null);
+		setTransactionModal(null);
 	}
 
 	function updateRuntimeFunctionInput(index: number, value: string) {
@@ -303,6 +362,8 @@ export default function InteractPage() {
 		setRuntimeFnBusy(true);
 		setRuntimeFnResult(null);
 		setRuntimeFnLog([]);
+		setTransactionModal(null);
+		let submittedHash: `0x${string}` | undefined;
 
 		try {
 			const args = selectedRuntimeFunctionInputs.map((parameter, index) =>
@@ -318,6 +379,7 @@ export default function InteractPage() {
 			);
 
 			if (isRead) {
+				setRuntimeWriteFeedback(null);
 				const result = await publicClient.readContract({
 					address: runtimeAddress as Address,
 					abi: singleFunctionAbi,
@@ -329,6 +391,11 @@ export default function InteractPage() {
 				return;
 			}
 
+			setRuntimeWriteFeedback({
+				phase: "signing",
+				functionSignature: selectedRuntimeFunction.signature,
+				signer: signerAddress,
+			});
 			const wallet = await getWalletClient(accountIndex, rpcUrl);
 			const hash = await wallet.writeContract({
 				address: runtimeAddress as Address,
@@ -336,10 +403,27 @@ export default function InteractPage() {
 				functionName: selectedRuntimeFunction.abi.name,
 				args,
 			});
+			submittedHash = hash;
+			setRuntimeWriteFeedback({
+				phase: "pending",
+				functionSignature: selectedRuntimeFunction.signature,
+				hash,
+				signer: signerAddress,
+			});
 			pushRuntimeFn("pending", `Transaction submitted: ${hash}`);
 
 			const receipt = await publicClient.waitForTransactionReceipt({ hash, timeout: 120_000 });
 			requireSuccessfulTx(selectedRuntimeFunction.signature, receipt);
+			const confirmedFeedback: FinalWriteFeedback = {
+				phase: "confirmed",
+				functionSignature: selectedRuntimeFunction.signature,
+				hash,
+				signer: signerAddress,
+				blockNumber: receipt.blockNumber,
+				gasUsed: receipt.gasUsed,
+			};
+			setRuntimeWriteFeedback(confirmedFeedback);
+			setTransactionModal(confirmedFeedback);
 			setRuntimeFnResult(
 				serializeResult({
 					hash,
@@ -349,9 +433,19 @@ export default function InteractPage() {
 				}),
 			);
 			pushRuntimeFn("success", "Transaction confirmed");
-			await loadRuntime();
+			await loadRuntime({ preserveInteraction: true, preserveModal: true });
 		} catch (error) {
-			pushRuntimeFn("error", error instanceof Error ? error.message : String(error));
+			const message = error instanceof Error ? error.message : String(error);
+			const failedFeedback: FinalWriteFeedback = {
+				phase: "failed",
+				functionSignature: selectedRuntimeFunction.signature,
+				signer: signerAddress,
+				message,
+				hash: submittedHash,
+			};
+			setRuntimeWriteFeedback(failedFeedback);
+			setTransactionModal(failedFeedback);
+			pushRuntimeFn("error", message);
 		} finally {
 			setRuntimeFnBusy(false);
 		}
@@ -363,6 +457,8 @@ export default function InteractPage() {
 			setRuntimeFnInputs([]);
 			setRuntimeFnResult(null);
 			setRuntimeFnLog([]);
+			setRuntimeWriteFeedback(null);
+			setTransactionModal(null);
 			return;
 		}
 
@@ -372,6 +468,8 @@ export default function InteractPage() {
 			setRuntimeFnInputs((runtimeFunctions[0]?.abi.inputs ?? []).map(() => ""));
 			setRuntimeFnResult(null);
 			setRuntimeFnLog([]);
+			setRuntimeWriteFeedback(null);
+			setTransactionModal(null);
 		}
 	}, [runtimeFunctions, runtimeFnSelector]);
 
@@ -581,7 +679,9 @@ export default function InteractPage() {
 										className="btn-primary"
 									>
 										{runtimeFnBusy
-											? "Running..."
+											? selectedFunctionIsRead
+												? "Running Read..."
+												: "Sending Transaction..."
 											: ["view", "pure"].includes(selectedRuntimeFunction.abi.stateMutability)
 												? "Run Read"
 												: "Send Transaction"}
@@ -591,6 +691,46 @@ export default function InteractPage() {
 						</div>
 
 						<div className="space-y-4">
+							{selectedRuntimeFunction &&
+								!selectedFunctionIsRead &&
+								runtimeWriteFeedback &&
+								(runtimeWriteFeedback.phase === "signing" || runtimeWriteFeedback.phase === "pending") && (
+								<div
+									className="rounded-lg border border-accent-yellow/20 bg-accent-yellow/5 p-3 space-y-2"
+								>
+									<div className="flex flex-wrap items-center gap-2">
+										<span
+											className="badge text-[10px] bg-accent-yellow/10 text-accent-yellow"
+										>
+											{runtimeWriteFeedback.phase === "signing"
+												? "Waiting for signature"
+												: "Transaction pending"}
+										</span>
+										<span className="text-[11px] text-text-muted">
+											{runtimeWriteFeedback.functionSignature}
+										</span>
+									</div>
+									<p className="text-xs text-text-secondary">
+										Signer: <code>{runtimeWriteFeedback.signer}</code>
+									</p>
+									{"hash" in runtimeWriteFeedback && runtimeWriteFeedback.hash && (
+										<p className="text-xs text-text-secondary break-all">
+											Hash: <code>{runtimeWriteFeedback.hash}</code>
+										</p>
+									)}
+									{runtimeWriteFeedback.phase === "signing" && (
+										<p className="text-xs text-text-secondary">
+											Preparing the write call with the selected signer.
+										</p>
+									)}
+									{runtimeWriteFeedback.phase === "pending" && (
+										<p className="text-xs text-text-secondary">
+											The transaction has been submitted and is waiting for confirmation on-chain.
+										</p>
+									)}
+								</div>
+							)}
+
 							<div className="space-y-2">
 								<h3 className="text-sm font-semibold text-text-primary">Output</h3>
 								<div className="rounded-lg border border-white/[0.06] bg-black/25 min-h-52 p-3">
@@ -624,6 +764,91 @@ export default function InteractPage() {
 						Need a runtime first?{" "}
 						<Link to="/deploy" className="text-polka-400 hover:underline">Deploy one</Link>.
 					</p>
+				</div>
+			)}
+
+			{transactionModal && (
+				<div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+					<button
+						type="button"
+						aria-label="Close transaction result"
+						onClick={() => setTransactionModal(null)}
+						className="absolute inset-0 bg-surface-950/80 backdrop-blur-sm"
+					/>
+					<div
+						role="dialog"
+						aria-modal="true"
+						aria-labelledby="interaction-transaction-title"
+						className={`card relative z-10 w-full max-w-lg space-y-4 ${
+							transactionModal.phase === "confirmed"
+								? "border-accent-green/20"
+								: "border-accent-red/20"
+						}`}
+					>
+						<div className="flex items-start gap-3">
+							<div
+								className={`mt-0.5 flex h-9 w-9 items-center justify-center rounded-full ${
+									transactionModal.phase === "confirmed"
+										? "bg-accent-green/15 text-accent-green"
+										: "bg-accent-red/15 text-accent-red"
+								}`}
+							>
+								{transactionModal.phase === "confirmed" ? (
+									<svg className="h-5 w-5" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8">
+										<path d="m4 10 4 4 8-8" />
+									</svg>
+								) : (
+									<svg className="h-5 w-5" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8">
+										<path d="M6 6l8 8M14 6l-8 8" />
+									</svg>
+								)}
+							</div>
+							<div className="min-w-0 flex-1 space-y-1">
+								<h2 id="interaction-transaction-title" className="section-title">
+									{transactionModal.phase === "confirmed"
+										? "Transaction Confirmed"
+										: "Transaction Failed"}
+								</h2>
+								<p className="text-sm text-text-secondary break-words">
+									{transactionModal.functionSignature}
+								</p>
+							</div>
+						</div>
+
+						<div className="space-y-2 text-sm">
+							<p className="text-text-secondary break-all">
+								<span className="text-text-muted">Signer: </span>
+								<code>{transactionModal.signer}</code>
+							</p>
+							{"hash" in transactionModal && transactionModal.hash && (
+								<p className="text-text-secondary break-all">
+									<span className="text-text-muted">Hash: </span>
+									<code>{transactionModal.hash}</code>
+								</p>
+							)}
+							{transactionModal.phase === "confirmed" && (
+								<p className="text-text-secondary">
+									<span className="text-text-muted">Receipt: </span>
+									Block {transactionModal.blockNumber.toString()} · Gas used {transactionModal.gasUsed.toString()}
+								</p>
+							)}
+							{transactionModal.phase === "failed" && (
+								<p className="text-accent-red">
+									{transactionModal.message}
+								</p>
+							)}
+						</div>
+
+						<div className="flex justify-end">
+							<button
+								type="button"
+								onClick={() => setTransactionModal(null)}
+								className="btn-secondary"
+							>
+								Close
+							</button>
+						</div>
+					</div>
 				</div>
 			)}
 		</div>

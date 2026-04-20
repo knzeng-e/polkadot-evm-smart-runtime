@@ -35,7 +35,7 @@ export default function App() {
 		{ path: "/", label: "Home" },
 		{ path: "/deploy", label: "Deploy Runtime" },
 		{ path: "/manage", label: "Manage Runtime" },
-		{ path: "/interact", label: "Interact Runtime" },
+		{ path: "/interact", label: "Interact" },
 	];
 
 	return (
